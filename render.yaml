@@ -10,6 +10,7 @@ databases:
     plan: free
     region: frankfurt
     postgresMajorVersion: "16"
+    ipAllowList: [] # only the app itself may connect, nothing from the internet
 
 services:
   - type: web

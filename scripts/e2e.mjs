@@ -33,7 +33,10 @@ function ok(condition, message) {
   if (!condition) problems.push(message);
 }
 
-const browser = await chromium.launch();
+// When testing a live address from behind a company or sandbox proxy, the
+// browser has to be told about the proxy explicitly.
+const viaProxy = !/\/\/(localhost|127\.0\.0\.1)/.test(base) && process.env.HTTPS_PROXY;
+const browser = await chromium.launch(viaProxy ? { proxy: { server: process.env.HTTPS_PROXY } } : {});
 const context = await browser.newContext({ ...devices["iPhone 14"], permissions: ["clipboard-read", "clipboard-write"] });
 const page = await context.newPage();
 const consoleErrors = [];
