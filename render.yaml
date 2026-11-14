@@ -1,0 +1,37 @@
+# How Render should run Selg: one web service and one Postgres database,
+# both on the free plan, in Frankfurt (the Render region closest to Norway).
+#
+# Secrets are NOT stored here. ANTHROPIC_API_KEY and APP_PASSCODE are typed
+# into Render's dashboard ("sync: false" means Render asks for them).
+
+databases:
+  - name: selg-db
+    databaseName: selg
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: selg
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: selg-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_PASSCODE
+        sync: false
