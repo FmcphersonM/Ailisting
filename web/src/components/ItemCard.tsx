@@ -13,6 +13,7 @@ export interface ItemActions {
   merge: (fromId: string, intoId: string) => void;
   removePhoto: (photoId: string) => void;
   movePhoto: (photoId: string, to: string) => void;
+  useOriginalPhoto: (photoId: string) => void;
 }
 
 function name(item: Item): string {
@@ -48,6 +49,7 @@ export function ItemCard({
         <button key={p.id} onClick={() => setPhoto(p)} aria-label={`Photo ${index + 1}. Tap for options.`}>
           <img src={p.thumbUrl} alt="" loading="lazy" />
           {index === 0 && <span className="cover-tag">Cover</span>}
+          {p.blurry && <span className="blur-tag">Blurry</span>}
         </button>
       ))}
     </div>
@@ -67,6 +69,10 @@ export function ItemCard({
           }}
           onRemove={() => {
             actions.removePhoto(photo.id);
+            setPhoto(null);
+          }}
+          onUseOriginal={() => {
+            actions.useOriginalPhoto(photo.id);
             setPhoto(null);
           }}
         />
@@ -395,6 +401,7 @@ function PhotoSheet({
   onClose,
   onMove,
   onRemove,
+  onUseOriginal,
 }: {
   photo: ItemPhoto;
   others: Item[];
@@ -402,6 +409,7 @@ function PhotoSheet({
   onClose: () => void;
   onMove: (to: string) => void;
   onRemove: () => void;
+  onUseOriginal: () => void;
 }) {
   const [moving, setMoving] = useState(false);
   return (
@@ -409,6 +417,21 @@ function PhotoSheet({
       {!moving && (
         <>
           <img className="sheet-photo" src={photo.url} alt="" />
+          {photo.blurry && (
+            <div className="notice">This photo is blurry. If you can, take it again: sharp photos sell better.</div>
+          )}
+          {photo.edited && (
+            <>
+              <p className="muted small">
+                {photo.cutOut
+                  ? "I cut this item out of a photo that shows several things."
+                  : "I tidied this photo: trimmed the surroundings or sharpened it. The item itself is unchanged."}
+              </p>
+              <button className="btn btn-secondary" onClick={onUseOriginal}>
+                Use the original photo instead
+              </button>
+            </>
+          )}
           <button className="btn btn-secondary" onClick={() => setMoving(true)}>
             This photo belongs to another item
           </button>

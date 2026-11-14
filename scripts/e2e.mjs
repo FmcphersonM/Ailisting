@@ -92,6 +92,21 @@ try {
     ok(true, "answered a question about an unclear photo");
   }
 
+  // --- a photo the app tidied can be switched back to the original ---
+  const tidied = page.locator("article").first().locator(".strip button").first();
+  await tidied.click();
+  const useOriginal = page.getByRole("button", { name: "Use the original photo instead" });
+  if ((await useOriginal.count()) > 0) {
+    await useOriginal.click();
+    await page.getByRole("dialog").waitFor({ state: "detached" });
+    await page.waitForTimeout(800);
+    await page.locator("article").first().locator(".strip button").first().click();
+    await page.getByRole("button", { name: "Close" }).waitFor();
+    ok((await useOriginal.count()) === 0, "a tidied photo can be switched back to the original");
+  }
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+
   // --- edit the first item ---
   const first = page.locator("article").first();
   await first.getByRole("button", { name: "Title. Tap to edit." }).click();

@@ -25,7 +25,9 @@ export interface ItemPhoto {
   thumbUrl: string;
   width: number;
   height: number;
-  cutOut: boolean;
+  cutOut: boolean; // cut out of a photo that shows several things
+  edited: boolean; // trimmed or sharpened by the app; the original is kept
+  blurry: boolean;
 }
 
 export type Condition = "new" | "like_new" | "good" | "fair" | "needs_repair";
@@ -158,6 +160,7 @@ export const api = {
     return request<{ id: string; thumbUrl: string }>("POST", `/batches/${batchId}/photos`, form);
   },
   deletePhoto: (photoId: string) => request<{ ok: true }>("DELETE", `/photos/${photoId}`),
+  videoReport: (batchId: string, report: object) => request<{ ok: true }>("POST", `/batches/${batchId}/video-report`, report),
   analyze: (batchId: string) => request<Batch>("POST", `/batches/${batchId}/analyze`),
   asOneItem: (batchId: string) => request<Batch>("POST", `/batches/${batchId}/as-one-item`),
   answerBatchQuestion: (questionId: string, choice: string) =>
@@ -171,6 +174,7 @@ export const api = {
     request<Item>("POST", `/items/${id}/answers`, { answers }),
   merge: (fromId: string, intoId: string) => request<Item>("POST", `/items/${fromId}/merge`, { into: intoId }),
   removeItemPhoto: (photoId: string) => request<{ ok: true }>("DELETE", `/item-photos/${photoId}`),
+  useOriginalPhoto: (photoId: string) => request<{ ok: true }>("POST", `/item-photos/${photoId}/original`),
   moveItemPhoto: (photoId: string, to: string) =>
     request<{ ok: true; itemId: string }>("POST", `/item-photos/${photoId}/move`, { to }),
   setPosted: (id: string, platform: Platform, posted: boolean) =>

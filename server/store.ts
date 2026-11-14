@@ -17,7 +17,9 @@ export interface ItemPhotoDTO {
   thumbUrl: string;
   width: number;
   height: number;
-  cutOut: boolean;
+  cutOut: boolean; // cut out of a photo that shows several things
+  edited: boolean; // trimmed or sharpened by the app; the original is kept
+  blurry: boolean;
 }
 
 export interface ItemDTO {
@@ -85,8 +87,18 @@ const ITEM_COLUMNS = `id, batch_id, status, ai_state, ai_error, label, title_no,
 async function attach(rows: ItemRow[]): Promise<ItemDTO[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
-  const photoRows = await q<{ id: string; item_id: string; width: number; height: number; cut_out: boolean }>(
-    `SELECT id, item_id, width, height, (crop IS NOT NULL) AS cut_out
+  const photoRows = await q<{
+    id: string;
+    item_id: string;
+    width: number;
+    height: number;
+    cut_out: boolean;
+    edited: boolean;
+    blurry: boolean;
+    version: string;
+  }>(
+    `SELECT id, item_id, width, height, (crop IS NOT NULL) AS cut_out, edited, blurry,
+            (CASE WHEN data IS NULL THEN 'o' ELSE 'e' END) AS version
        FROM item_photos WHERE item_id = ANY($1) ORDER BY position, id`,
     [ids],
   );
@@ -122,11 +134,15 @@ async function attach(rows: ItemRow[]): Promise<ItemDTO[]> {
       .filter((p) => p.item_id === r.id)
       .map((p) => ({
         id: p.id,
-        url: `/api/item-photos/${p.id}`,
-        thumbUrl: `/api/item-photos/${p.id}/thumb`,
+        // The address changes when a photo is switched back to its original,
+        // so the phone never shows a stale saved copy.
+        url: `/api/item-photos/${p.id}?v=${p.version}`,
+        thumbUrl: `/api/item-photos/${p.id}/thumb?v=${p.version}`,
         width: p.width,
         height: p.height,
         cutOut: p.cut_out,
+        edited: p.edited,
+        blurry: p.blurry,
       })),
     postedOn: listingRows.filter((l) => l.item_id === r.id).map((l) => l.platform),
     createdAt: r.created_at.toISOString(),

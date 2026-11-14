@@ -23,7 +23,7 @@ export interface PhotoForGrouping {
 }
 
 export async function groupPhotos(photos: PhotoForGrouping[]): Promise<AiResult<Grouping>> {
-  if (config.fakeAi) return fakeGrouping(photos.length);
+  if (config.fakeAi) return fakeGrouping(photos);
   const content: ContentBlock[] = [
     textBlock(
       `The seller added ${photos.length} photo${photos.length === 1 ? "" : "s"}. Each is labelled with its number and size before the image.`,

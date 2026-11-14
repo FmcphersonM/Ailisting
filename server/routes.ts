@@ -4,7 +4,7 @@ import { accessMode, isSignedIn, login, logout, requireAuth } from "./auth.js";
 import { config } from "./config.js";
 import { one, pool, q } from "./db.js";
 import { newId } from "./ids.js";
-import { makeThumb, normalizeUpload } from "./images.js";
+import { makeThumb, measureSharpness, normalizeUpload } from "./images.js";
 import { startBatchAnalysis, startDraft, startRefine } from "./pipeline.js";
 import { CONDITIONS } from "./prompts.js";
 import { loadBatch, loadItem, loadItems, loadOpenBatches, type StoredQuestion } from "./store.js";
@@ -103,13 +103,14 @@ api.post("/batches/:id/photos", upload.single("file"), async (req, res) => {
     return fail(res, 415, "That file is not a picture I can read.");
   }
   const thumb = await makeThumb(picture.data);
+  const sharpness = await measureSharpness(picture.data);
   const id = newId();
   const position = Number.isFinite(Number(req.body?.position)) ? Math.round(Number(req.body.position)) : 0;
   const source = req.body?.source === "video" ? "video" : "photo";
   await q(
-    `INSERT INTO photos (id, user_id, batch_id, position, source, width, height, data, thumb)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [id, userId, batchId, position, source, picture.width, picture.height, picture.data, thumb],
+    `INSERT INTO photos (id, user_id, batch_id, position, source, width, height, data, thumb, sharpness)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [id, userId, batchId, position, source, picture.width, picture.height, picture.data, thumb, sharpness],
   );
   res.json({ id, thumbUrl: `/api/photos/${id}/thumb`, bytes: picture.data.length });
 });
@@ -121,6 +122,17 @@ api.delete("/photos/:id", async (req, res) => {
       WHERE p.id = $1 AND p.user_id = $2 AND b.id = p.batch_id AND b.status = 'uploading'`,
     [param(req, "id"), currentUserId(req)],
   );
+  res.json({ ok: true });
+});
+
+/**
+ * The phone reports how picking frames from a video went (sizes and
+ * measurements only, never pictures). It is written to the server log so
+ * problems on a real phone can be understood afterwards.
+ */
+api.post("/batches/:id/video-report", (req, res) => {
+  const text = JSON.stringify(req.body ?? {});
+  console.log(`[video] batch=${param(req, "id")} ${text.slice(0, 6000)}`);
   res.json({ ok: true });
 });
 
@@ -431,6 +443,20 @@ api.delete("/item-photos/:id", async (req, res) => {
     [param(req, "id"), currentUserId(req)],
   );
   res.json({ ok: true });
+});
+
+/** Undo the app's trimming and sharpening: show the photo as it was taken. */
+api.post("/item-photos/:id/original", async (req, res) => {
+  const row = await one<{ item_id: string }>(
+    `UPDATE item_photos ip
+        SET data = NULL, thumb = NULL, crop = NULL, edited = false, width = p.width, height = p.height
+       FROM photos p, items i
+      WHERE ip.id = $1 AND p.id = ip.photo_id AND i.id = ip.item_id AND i.user_id = $2
+      RETURNING ip.item_id`,
+    [param(req, "id"), currentUserId(req)],
+  );
+  if (!row) return fail(res, 404, "That photo no longer exists.");
+  res.json({ ok: true, itemId: row.item_id });
 });
 
 /** Move a photo to another item, or make it an item of its own ("new"). */

@@ -212,6 +212,12 @@ function Staging({ batch, reload, onStarted }: { batch: Batch; reload: () => Pro
         </div>
       )}
 
+      {batch.photos.some((p) => p.source === "video") && (
+        <p className="muted small">
+          The pictures from your video are candidates. I keep only the best few of each item and drop the rest.
+        </p>
+      )}
+
       <div className="grid">
         {batch.photos.map((photo) => (
           <div className="tile" key={photo.id}>
@@ -352,6 +358,7 @@ function Review({
         }),
       ),
     movePhoto: (photoId, to) => void change(() => api.moveItemPhoto(photoId, to)),
+    useOriginalPhoto: (photoId) => void change(() => api.useOriginalPhoto(photoId)),
   };
 
   const items = onlyItem ? batch.items.filter((i) => i.id === onlyItem) : batch.items;

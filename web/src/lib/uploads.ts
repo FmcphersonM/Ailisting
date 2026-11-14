@@ -108,11 +108,12 @@ class BatchUploads {
             }
             this.enqueue(blob, "photo");
           } else {
-            const frames = await extractSharpFrames(file, (done, total) => {
+            const { frames, report } = await extractSharpFrames(file, (done, total) => {
               this.set({
                 pending: this.state.pending.map((p) => (p.key === pending.key ? { ...p, progress: done / total } : p)),
               });
             });
+            void api.videoReport(this.batchId, report).catch(() => undefined);
             for (const frame of frames) {
               if (this.roomLeft() <= 0) {
                 this.addProblem(`Only ${this.maxPhotos} photos fit in one go. The rest were left out.`);
@@ -122,7 +123,13 @@ class BatchUploads {
             }
           }
         } catch (err) {
-          this.addProblem(`${file.name}: ${err instanceof Error ? err.message : "could not be read."}`);
+          const message = err instanceof Error ? err.message : "could not be read.";
+          if (pending.kind === "video") {
+            void api
+              .videoReport(this.batchId, { name: file.name, type: file.type, megabytes: Math.round(file.size / 104857.6) / 10, failed: message })
+              .catch(() => undefined);
+          }
+          this.addProblem(`${file.name}: ${message}`);
         } finally {
           this.set({ pending: this.state.pending.filter((p) => p.key !== pending.key) });
         }

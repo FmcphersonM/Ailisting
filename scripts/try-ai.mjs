@@ -51,7 +51,9 @@ for (const question of batch.questions) console.log(`UNSURE PHOTO: ${question.qu
 fs.mkdirSync(outDir, { recursive: true });
 for (const [n, item] of batch.items.entries()) {
   console.log(`\n=== Item ${n + 1}: ${item.label}  [${item.aiState}${item.aiError ? `: ${item.aiError}` : ""}]  $${item.costUsd.toFixed(4)}`);
-  console.log(`photos: ${item.photos.map((p) => `${p.width}x${p.height}${p.cutOut ? " cut-out" : ""}`).join(", ")}`);
+  console.log(
+    `photos: ${item.photos.map((p) => `${p.width}x${p.height}${p.cutOut ? " cut-out" : p.edited ? " tidied" : ""}${p.blurry ? " BLURRY" : ""}`).join(", ")}`,
+  );
   console.log(`NO  ${item.titleNo}  (${item.titleNo.length} chars)\n${item.descriptionNo}`);
   console.log(`EN  ${item.titleEn}  (${item.titleEn.length} chars)\n${item.descriptionEn}`);
   console.log(`condition=${item.condition} brand="${item.brand}" model="${item.model}" category="${item.category}"`);

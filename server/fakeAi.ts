@@ -20,9 +20,14 @@ function result<T>(data: T, inputTokens: number, outputTokens: number): AiResult
   };
 }
 
-/** Pretends every two photos show one item, and that the last photo is unclear. */
-export async function fakeGrouping(photoCount: number): Promise<AiResult<Grouping>> {
+/**
+ * Pretends every two photos show one item, that the last photo is unclear,
+ * and that the first item only fills the middle of its first photo (so the
+ * "trim the surroundings" step gets exercised too).
+ */
+export async function fakeGrouping(sizes: { width: number; height: number }[]): Promise<AiResult<Grouping>> {
   await wait(1500);
+  const photoCount = sizes.length;
   const items: Grouping["items"] = [];
   const unsure: Grouping["unsure_photos"] = [];
   const lastIsUnsure = photoCount >= 5 && photoCount % 2 === 1;
@@ -31,6 +36,10 @@ export async function fakeGrouping(photoCount: number): Promise<AiResult<Groupin
     const photos = [{ photo: n, whole_photo: true, box: null as number[] | null }];
     if (n + 1 <= usable) photos.push({ photo: n + 1, whole_photo: true, box: null });
     items.push({ name: `Demo item ${items.length + 1}`, photos });
+  }
+  if (items[0] && sizes[0]) {
+    const { width, height } = sizes[0];
+    items[0].photos[0].box = [width * 0.25, height * 0.25, width * 0.75, height * 0.75];
   }
   if (lastIsUnsure) {
     unsure.push({ photo: photoCount, question: "Is this part of the first item, or something separate?", likely_item: 1 });

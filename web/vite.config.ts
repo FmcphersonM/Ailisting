@@ -11,6 +11,7 @@ export default defineConfig({
   build: { outDir: path.join(here, "dist"), emptyOutDir: true },
   server: {
     port: 5173,
+    fs: { allow: [path.join(here, "..")] }, // the app also uses code in ../shared
     // While developing, API calls go to the server started by "npm run dev".
     proxy: { "/api": "http://localhost:3000" },
   },

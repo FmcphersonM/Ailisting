@@ -168,6 +168,17 @@ const migrations: { id: string; sql: string }[] = [
       );
     `,
   },
+  {
+    id: "002_photo_quality",
+    sql: `
+      -- How sharp each uploaded photo is (see shared/sharpness.ts).
+      ALTER TABLE photos ADD COLUMN sharpness REAL;
+      -- edited: the app trimmed the surroundings or sharpened it.
+      -- blurry: too blurry to rescue; the app suggests retaking it.
+      ALTER TABLE item_photos ADD COLUMN edited BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE item_photos ADD COLUMN blurry BOOLEAN NOT NULL DEFAULT false;
+    `,
+  },
 ];
 
 export async function migrate(): Promise<void> {

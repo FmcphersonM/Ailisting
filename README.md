@@ -9,6 +9,15 @@ Photograph used things with your phone and get ready-to-post listings.
 
 Posting to Finn, Tise and Facebook is always done by you; the app only prepares the text and photos.
 
+## What happens to your photos
+
+- Photos are shrunk on the phone before upload. From a video, the phone picks the sharpest, steadiest moments and corrects a washed-out or dark picture.
+- When a photo shows several things, each item is cut out. When one item fills only part of a photo, the surroundings are trimmed.
+- Soft photos get careful sharpening. Photos too blurry to rescue are marked "Blurry" so you can retake them.
+- The item itself is never redrawn, and the original photo is always kept: tap a photo and choose "Use the original photo instead".
+
+Removing a background completely or placing an item in a new scene needs a separate image-editing service and is not built in.
+
 ## What is where
 
 | Folder | What it holds |
@@ -18,6 +27,7 @@ Posting to Finn, Tise and Facebook is always done by you; the app only prepares 
 | `server/prompts.ts` | The instructions Claude gets. Edit this to change how listings are written. |
 | `web/src/lib/platforms.ts` | Marketplace links and the fields each one needs. |
 | `render.yaml` | How Render runs the app. |
+| `shared/` | Code used by both halves (how sharpness is measured). |
 | `scripts/` | Test helpers. |
 
 ## Settings

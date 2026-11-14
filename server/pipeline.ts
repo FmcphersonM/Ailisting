@@ -2,7 +2,8 @@ import { draftListing, groupPhotos, MAX_PHOTOS_PER_DRAFT, refineListing } from "
 import { AiError, type AiResult } from "./claude.js";
 import { one, q } from "./db.js";
 import { newId } from "./ids.js";
-import { cropRegion, forGrouping, makeThumb, scaleBox } from "./images.js";
+import { BLURRY_BELOW, SOFT_BELOW } from "../shared/sharpness.js";
+import { cropRegion, CUT_OUT, forGrouping, makeThumb, scaleBox, sharpen, TIDY_CROP } from "./images.js";
 import type { Refined } from "./prompts.js";
 import type { StoredQuestion } from "./store.js";
 
@@ -74,8 +75,12 @@ interface PhotoRow {
   source: string;
   width: number;
   height: number;
+  sharpness: number | null;
   data: Buffer;
 }
+
+/** A video gives many frames; this many per item is plenty for a listing. */
+const MAX_VIDEO_FRAMES_PER_ITEM = 4;
 
 async function analyzeBatch(userId: number, batchId: string): Promise<void> {
   await q("UPDATE batches SET status = 'analyzing', error = NULL, stage = $1, updated_at = now() WHERE id = $2", [
@@ -84,7 +89,7 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
   ]);
 
   const photos = await q<PhotoRow>(
-    "SELECT id, source, width, height, data FROM photos WHERE batch_id = $1 ORDER BY position, created_at",
+    "SELECT id, source, width, height, sharpness, data FROM photos WHERE batch_id = $1 ORDER BY position, created_at",
     [batchId],
   );
   if (photos.length === 0) throw new AiError("There are no photos to look at.");
@@ -92,7 +97,7 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
   // Smaller copies are enough to tell items apart, and cost less.
   const seen: { jpeg: Buffer; width: number; height: number; source: string }[] = [];
   for (const p of photos) {
-    const small = await forGrouping(p.data);
+    const small = await forGrouping(p.data, p.source === "video");
     seen.push({ jpeg: small.data, width: small.width, height: small.height, source: p.source });
   }
 
@@ -105,10 +110,13 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
 
   for (const [index, group] of grouping.data.items.entries()) {
     const used = new Set<number>();
+    let videoFrames = 0;
     const members = group.photos.filter((m) => {
       const ok = Number.isInteger(m.photo) && m.photo >= 1 && m.photo <= photos.length && !used.has(m.photo);
       used.add(m.photo);
-      return ok;
+      if (!ok) return false;
+      if (photos[m.photo - 1].source === "video" && ++videoFrames > MAX_VIDEO_FRAMES_PER_ITEM) return false;
+      return true;
     });
     if (members.length === 0) continue;
 
@@ -119,18 +127,38 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
     );
     for (const [position, member] of members.entries()) {
       const photo = photos[member.photo - 1];
-      const box = member.whole_photo ? null : scaleBox(member.box, seen[member.photo - 1], photo);
-      if (box) {
-        const cut = await cropRegion(photo.data, box);
+      const seenAs = seen[member.photo - 1];
+      // Several things in one photo: cut this one out. One thing with a lot
+      // of surroundings: trim the surroundings. Otherwise leave it whole.
+      const cutOut = !member.whole_photo;
+      const box = scaleBox(member.box, seenAs, photo, cutOut ? CUT_OUT : TIDY_CROP);
+      const soft = photo.sharpness !== null && photo.sharpness < SOFT_BELOW;
+      const blurry = photo.sharpness !== null && photo.sharpness < BLURRY_BELOW;
+
+      let picture = box ? await cropRegion(photo.data, box) : null;
+      if (soft) picture = await sharpen(picture?.data ?? photo.data, blurry);
+
+      if (picture) {
         await q(
-          `INSERT INTO item_photos (id, item_id, photo_id, position, crop, width, height, data, thumb)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [newId(), itemId, photo.id, position, JSON.stringify(box), cut.width, cut.height, cut.data, await makeThumb(cut.data)],
+          `INSERT INTO item_photos (id, item_id, photo_id, position, crop, width, height, data, thumb, edited, blurry)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)`,
+          [
+            newId(),
+            itemId,
+            photo.id,
+            position,
+            box && cutOut ? JSON.stringify(box) : null,
+            picture.width,
+            picture.height,
+            picture.data,
+            await makeThumb(picture.data),
+            blurry,
+          ],
         );
       } else {
         await q(
-          "INSERT INTO item_photos (id, item_id, photo_id, position, width, height) VALUES ($1, $2, $3, $4, $5, $6)",
-          [newId(), itemId, photo.id, position, photo.width, photo.height],
+          "INSERT INTO item_photos (id, item_id, photo_id, position, width, height, blurry) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [newId(), itemId, photo.id, position, photo.width, photo.height, blurry],
         );
       }
       placed.add(member.photo);
@@ -156,10 +184,11 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
       ],
     );
   }
-  // A photo Claude did not mention at all is also worth asking about.
+  // A photo the seller took on purpose that Claude did not mention at all is
+  // also worth asking about. Spare video frames are simply dropped.
   const skipped = new Set(grouping.data.skipped_photos.map((s) => s.photo));
   for (let n = 1; n <= photos.length; n++) {
-    if (placed.has(n) || asked.has(n) || skipped.has(n)) continue;
+    if (placed.has(n) || asked.has(n) || skipped.has(n) || photos[n - 1].source === "video") continue;
     await q("INSERT INTO batch_questions (id, batch_id, photo_id, question) VALUES ($1, $2, $3, $4)", [
       newId(),
       batchId,
@@ -167,6 +196,14 @@ async function analyzeBatch(userId: number, batchId: string): Promise<void> {
       "Where does this photo belong?",
     ]);
   }
+  // Video frames that were not used take up space for nothing.
+  await q(
+    `DELETE FROM photos p
+      WHERE p.batch_id = $1 AND p.source = 'video'
+        AND NOT EXISTS (SELECT 1 FROM item_photos ip WHERE ip.photo_id = p.id)
+        AND NOT EXISTS (SELECT 1 FROM batch_questions bq WHERE bq.photo_id = p.id)`,
+    [batchId],
+  );
 
   if (itemIds.length === 0) {
     await q(
